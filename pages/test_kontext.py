@@ -1,9 +1,9 @@
 """
-Producto Real · Imagen de referencia → Nueva composición
----------------------------------------------------------
-Sube una foto de un producto real (Frenadol, Almax, solar...)
-y genera una nueva imagen o vídeo de marketing con ese producto.
-Claude mejora el prompt automáticamente como director creativo.
+Producto Real · Composición con producto real
+----------------------------------------------
+Pipeline:
+  Imagen → rembg elimina fondo → Flux Pro genera escena → Pillow compone
+  Vídeo  → Kling anima la foto del producto en la escena
 """
 
 import streamlit as st
@@ -13,18 +13,13 @@ import requests
 import tempfile
 import os
 import json
-from PIL import Image
+from PIL import Image, ImageFilter
 from io import BytesIO
 from datetime import datetime
 
-st.set_page_config(
-    page_title="Producto Real · Farmacia Ads",
-    page_icon="📦",
-    layout="wide",
-)
-
-st.title("📦 Producto Real → Nueva composición")
-st.caption("Sube una foto real del producto · Claude mejora el prompt · Flux Kontext o Kling generan el resultado")
+st.set_page_config(page_title="Producto Real · Farmacia Ads", page_icon="📦", layout="wide")
+st.title("📦 Producto Real → Composición publicitaria")
+st.caption("Sube la foto del producto · Claude diseña la escena · IA genera y compone el resultado final")
 
 # ─── Formatos BD ROWA ─────────────────────────────────────────────────────────
 
@@ -33,50 +28,79 @@ FORMATS = {
     "header":   {"width": 1080, "height": 350,  "label": "Cabecera · 1080×350"},
 }
 
-# ─── Prompts de sistema para Claude ──────────────────────────────────────────
+# ─── Sistema Claude ───────────────────────────────────────────────────────────
 
-CLAUDE_IMAGE = """Eres el director creativo de una farmacia en Canarias, España.
-El usuario tiene una FOTO REAL de un producto farmacéutico y quiere colocarlo
-en una nueva escena publicitaria. El modelo Flux Kontext usará la foto como referencia
-y respetará el packaging, marca y colores exactos del producto.
+CLAUDE_IMAGEN = """Eres el director creativo de una farmacia en Canarias, España.
+El usuario tiene una FOTO REAL de un producto farmacéutico. El flujo de trabajo es:
+  1. rembg elimina el fondo de la foto del producto → queda solo el producto recortado.
+  2. Flux Pro genera la ESCENA de fondo (sin el producto — se añadirá después).
+  3. Pillow compone el producto recortado encima de la escena generada.
+
+Tu tarea: interpretar lo que quiere el usuario y devolver los parámetros para generar la escena de fondo.
 
 Responde SIEMPRE en JSON puro (sin markdown):
 {
   "formato": "panorama" | "header",
-  "prompt_kontext": "...",
+  "prompt_escena": "...",
+  "posicion": "inferior-centro" | "inferior-izquierda" | "inferior-derecha" | "centro",
+  "escala": 0.25,
   "copy": "...",
   "explicacion": "..."
 }
 
 "formato":
-  - "panorama" → 1080×1920 px, pantalla completa vertical.
-  - "header"   → 1080×350 px, banner horizontal.
-  - Si no especifica, elige el más adecuado.
+  - "panorama" → 1080×1920, pantalla completa vertical.
+  - "header"   → 1080×350, banner horizontal.
 
-"prompt_kontext":
-  - SIEMPRE en inglés.
-  - SIEMPRE empezar con: "Keep the product from the reference image exactly as it appears,
-    preserving all packaging, labels, colors, logo and branding."
-  - Luego describir la nueva escena de forma muy detallada y cinematográfica.
-  - Incluir: "ample empty space for text overlay" si es promoción.
-  - Terminar con: "commercial pharmacy advertisement, professional product photography, 4K."
-  - Nunca inventar el nombre de la marca — el producto viene de la foto.
+"prompt_escena":
+  - SIEMPRE en inglés, muy descriptivo.
+  - Es la escena SIN el producto — el producto se añade después.
+  - Debe incluir SIEMPRE: "with a clear empty flat surface [table/counter/sand] in the foreground
+    where a product will be placed, leave space for product placement."
+  - Estilo fotorrealista, comercial, iluminación profesional.
+  - Terminar con: "commercial advertisement background, professional photography, 4K."
+  - Para personas: "no recognizable faces", "lifestyle photography".
+
+"posicion": dónde poner el producto en la escena:
+  - "inferior-centro" → centrado en la parte inferior (mesas, mostradores)
+  - "inferior-izquierda" → izquierda-abajo (composiciones asimétricas)
+  - "inferior-derecha" → derecha-abajo
+  - "centro" → centro de la imagen (para headers o cuando el fondo es neutro)
+
+"escala": qué fracción del ancho de la imagen debe ocupar el producto. Entre 0.15 y 0.45.
+  - 0.20 → producto pequeño, escena protagonista
+  - 0.30 → equilibrado (recomendado)
+  - 0.40 → producto grande, protagonista
 
 "copy": Texto publicitario en español, máx 2 líneas.
 "explicacion": 1-2 frases describiendo la composición.
 
-Contexto de escenas por producto:
-- Solares: playa mediterránea, arena blanca, mar turquesa, verano.
-- Piojos: cuarto de baño cálido, padre/madre con hijo, ambiente sereno.
-- Analgésicos/antigripales: interior acogedor, invierno, familia.
-- Vitaminas: naturaleza, amanecer, persona activa, energía.
-- Ortopedia: exterior accesible, movilidad, independencia.
+─── EJEMPLOS ───
+
+Usuario: "Chica en campus universitario con amigos comiendo y riendo, se toma un comprimido efervescente en vaso, caja en la mesa, panorama"
+{
+  "formato": "panorama",
+  "prompt_escena": "Bright university cafeteria, group of young diverse students laughing and eating together at a wooden table, one student holding a glass of effervescent water, warm natural daylight from large windows, books and smartphones on table, cheerful social atmosphere, with a clear empty flat surface in the table foreground where a product box will be placed, leave space for product placement, no recognizable faces, lifestyle photography, commercial advertisement background, professional photography, 4K.",
+  "posicion": "inferior-centro",
+  "escala": 0.28,
+  "copy": "El alivio que te deja disfrutar\nAlmax 500mg · Efervescente",
+  "explicacion": "Campus universitario con estudiantes alegres. La caja se posiciona en la mesa en primer plano, conectando el producto con el momento social."
+}
+
+Usuario: "Playa mediterránea de verano, familia, solar, panorama, oferta 20%"
+{
+  "formato": "panorama",
+  "prompt_escena": "Beautiful Mediterranean beach with white sand and turquoise water, happy family playing in the background, golden hour warm light, sunglasses and beach towels, with a clear empty flat sandy surface in the foreground where a product will be placed, leave space for product placement, no recognizable faces, lifestyle photography, commercial advertisement background, professional photography, 4K.",
+  "posicion": "inferior-izquierda",
+  "escala": 0.30,
+  "copy": "Protégete este verano\n20% de descuento esta semana",
+  "explicacion": "Playa mediterránea veraniega. El producto se sitúa en la arena en primer plano izquierdo, con espacio para precio a la derecha."
+}
 """
 
 CLAUDE_VIDEO = """Eres el director creativo de una farmacia en Canarias, España.
-El usuario tiene una FOTO REAL de un producto y quiere crear un vídeo corto
-de marketing donde ese producto se anima o aparece en una escena en movimiento.
-El modelo Kling AI usará la foto como primer fotograma y la animará.
+El usuario tiene una FOTO del producto y quiere un vídeo corto donde Kling AI
+anima esa foto, creando movimiento cinematográfico.
 
 Responde SIEMPRE en JSON puro (sin markdown):
 {
@@ -86,24 +110,14 @@ Responde SIEMPRE en JSON puro (sin markdown):
   "explicacion": "..."
 }
 
-"orientacion":
-  - "panorama"  → 9:16 vertical, para pantallas BD ROWA portrait.
-  - "landscape" → 16:9 horizontal. Solo si el usuario lo pide explícitamente.
-
 "prompt_video":
-  - SIEMPRE en inglés.
-  - Describir el MOVIMIENTO que empieza desde la foto del producto.
-  - Tipos de movimiento ideales: slow camera zoom in/out, gentle product rotation,
-    background elements moving (waves, leaves, steam), camera pan across scene,
-    person entering frame, light changing gradually.
+  - SIEMPRE en inglés. Describe el movimiento que empieza desde la foto.
+  - Tipos: slow camera zoom, gentle product rotation, background elements moving
+    (waves, leaves, steam, bokeh), light changing, person entering frame.
   - Terminar con: "cinematic, smooth motion, professional pharmacy advertisement, 4K."
-  - Nunca inventar marca — el producto viene de la foto de referencia.
-
-"copy": Texto publicitario en español, máx 2 líneas.
-"explicacion": 1-2 frases describiendo la animación propuesta.
 """
 
-# ─── Setup ────────────────────────────────────────────────────────────────────
+# ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def init_state():
     if "historial" not in st.session_state:
@@ -126,65 +140,124 @@ def setup_fal():
 
 def ask_claude(client, prompt, system):
     resp = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1024,
+        model="claude-sonnet-4-6", max_tokens=1024,
         system=system,
         messages=[{"role": "user", "content": prompt}],
     )
     raw = resp.content[0].text.strip()
-    if "```json" in raw:
-        raw = raw.split("```json")[1].split("```")[0].strip()
-    elif "```" in raw:
-        raw = raw.split("```")[1].split("```")[0].strip()
+    for tag in ["```json", "```"]:
+        if tag in raw:
+            raw = raw.split(tag)[1].split("```")[0].strip()
+            break
     return json.loads(raw)
 
-def upload_image(img_bytes: bytes) -> str:
-    """Sube imagen a fal.ai CDN y devuelve URL. Si falla, usa base64."""
+def upload_to_fal(img_bytes: bytes) -> str:
+    """Sube imagen a fal.ai CDN. Redimensiona si es muy grande."""
+    img = Image.open(BytesIO(img_bytes))
+    if max(img.size) > 1500:
+        img.thumbnail((1500, 1500), Image.LANCZOS)
+        buf = BytesIO()
+        img.save(buf, format="JPEG", quality=90)
+        img_bytes = buf.getvalue()
+    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
+        f.write(img_bytes)
+        tmp = f.name
     try:
-        # Redimensionar si es muy grande (max 1500px) para evitar problemas
-        img = Image.open(BytesIO(img_bytes))
-        if max(img.size) > 1500:
-            img.thumbnail((1500, 1500), Image.LANCZOS)
-            buf = BytesIO()
-            img.save(buf, format="JPEG", quality=90)
-            img_bytes = buf.getvalue()
+        url = fal_client.upload_file(tmp)
+    finally:
+        os.unlink(tmp)
+    return url
 
-        # Subir a fal.ai CDN
-        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
-            f.write(img_bytes)
-            tmp_path = f.name
-        url = fal_client.upload_file(tmp_path)
-        os.unlink(tmp_path)
-        return url
-    except Exception:
-        # Fallback: base64 data URL
-        import base64
-        b64 = base64.b64encode(img_bytes).decode("utf-8")
-        return f"data:image/jpeg;base64,{b64}"
+def remove_background(img_bytes: bytes) -> bytes:
+    """Elimina el fondo usando rembg. Devuelve PNG con transparencia."""
+    from rembg import remove
+    return remove(img_bytes)
 
-def resize_to_bdrowa(img_bytes: bytes, formato: str) -> bytes:
-    """Redimensiona y recorta al formato exacto BD ROWA."""
+def generate_scene_flux(prompt: str, formato: str) -> bytes:
+    """Genera la escena de fondo con Flux Pro."""
+    fmt = FORMATS[formato]
+    if formato == "panorama":
+        size = {"width": 1080, "height": 1920}
+    else:
+        size = {"width": 1400, "height": 455}
+
+    result = fal_client.subscribe(
+        "fal-ai/flux-pro/v1.1",
+        arguments={
+            "prompt": prompt,
+            "image_size": size,
+            "num_images": 1,
+            "safety_tolerance": "3",
+            "output_format": "jpeg",
+        },
+    )
+    url = result["images"][0]["url"]
+    resp = requests.get(url, timeout=60)
+    resp.raise_for_status()
+    return resp.content
+
+def compose_product_on_scene(
+    scene_bytes: bytes,
+    product_png_bytes: bytes,
+    formato: str,
+    posicion: str,
+    escala: float,
+) -> bytes:
+    """Compone el producto recortado encima de la escena."""
     fmt = FORMATS[formato]
     target_w, target_h = fmt["width"], fmt["height"]
-    img = Image.open(BytesIO(img_bytes))
-    img_ratio = img.width / img.height
-    target_ratio = target_w / target_h
-    if img_ratio > target_ratio:
-        new_w = int(img.height * target_ratio)
-        left = (img.width - new_w) // 2
-        img = img.crop((left, 0, left + new_w, img.height))
-    elif img_ratio < target_ratio:
-        new_h = int(img.width / target_ratio)
-        top = (img.height - new_h) // 2
-        img = img.crop((0, top, img.width, top + new_h))
-    img = img.resize((target_w, target_h), Image.LANCZOS)
+
+    # Preparar escena al tamaño exacto BD ROWA
+    scene = Image.open(BytesIO(scene_bytes)).convert("RGBA")
+    ratio_s = scene.width / scene.height
+    ratio_t = target_w / target_h
+    if ratio_s > ratio_t:
+        new_w = int(scene.height * ratio_t)
+        left = (scene.width - new_w) // 2
+        scene = scene.crop((left, 0, left + new_w, scene.height))
+    else:
+        new_h = int(scene.width / ratio_t)
+        top = (scene.height - new_h) // 2
+        scene = scene.crop((0, top, scene.width, top + new_h))
+    scene = scene.resize((target_w, target_h), Image.LANCZOS)
+
+    # Preparar producto recortado
+    product = Image.open(BytesIO(product_png_bytes)).convert("RGBA")
+    prod_w = int(target_w * escala)
+    prod_h = int(prod_w * product.height / product.width)
+    product = product.resize((prod_w, prod_h), Image.LANCZOS)
+
+    # Calcular posición
+    margin_x = int(target_w * 0.05)
+    margin_y = int(target_h * 0.04)
+
+    pos_map = {
+        "inferior-centro":    ((target_w - prod_w) // 2, target_h - prod_h - margin_y),
+        "inferior-izquierda": (margin_x, target_h - prod_h - margin_y),
+        "inferior-derecha":   (target_w - prod_w - margin_x, target_h - prod_h - margin_y),
+        "centro":             ((target_w - prod_w) // 2, (target_h - prod_h) // 2),
+    }
+    x, y = pos_map.get(posicion, pos_map["inferior-centro"])
+
+    # Sombra suave debajo del producto
+    shadow = Image.new("RGBA", (prod_w + 20, prod_h + 20), (0, 0, 0, 0))
+    shadow_layer = Image.new("RGBA", (prod_w, prod_h), (0, 0, 0, 60))
+    shadow.paste(shadow_layer, (10, 10))
+    shadow = shadow.filter(ImageFilter.GaussianBlur(8))
+    scene.paste(shadow, (x - 10, y - 10 + int(prod_h * 0.05)), shadow)
+
+    # Pegar producto
+    scene.paste(product, (x, y), product)
+
+    # Convertir a JPEG
+    final = Image.new("RGB", (target_w, target_h), (255, 255, 255))
+    final.paste(scene, mask=scene.split()[3])
     buf = BytesIO()
-    img.save(buf, format="JPEG", quality=95)
+    final.save(buf, format="JPEG", quality=95)
     return buf.getvalue()
 
-def ts_filename(tipo: str, ext: str) -> str:
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return f"bdrowa_{tipo}_{ts}.{ext}"
+def ts_filename(tag: str, ext: str) -> str:
+    return f"bdrowa_{tag}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
 
 # ─── Interfaz ─────────────────────────────────────────────────────────────────
 
@@ -192,7 +265,6 @@ init_state()
 claude_client = get_claude()
 setup_fal()
 
-# ── Panel izquierdo: subida de foto ───────────────────────────────────────────
 col_izq, col_der = st.columns([1, 1])
 
 with col_izq:
@@ -200,44 +272,27 @@ with col_izq:
     uploaded = st.file_uploader(
         "Sube la foto del producto (JPG, PNG)",
         type=["jpg", "jpeg", "png"],
-        help="Foto clara del producto, preferiblemente con fondo neutro o blanco."
     )
     if uploaded:
-        img_preview = Image.open(uploaded)
-        st.image(img_preview, caption="Foto de referencia", use_container_width=True)
+        st.image(Image.open(uploaded), caption="Referencia", use_container_width=True)
 
 with col_der:
     st.markdown("### ✍️ 2. Describe la escena")
     prompt_usuario = st.text_area(
         "¿Qué quieres comunicar? (en español)",
-        placeholder="Ej: Este protector solar en una playa mediterránea con arena blanca y mar azul, ambiente veraniego, espacio para poner precio",
-        height=110,
+        placeholder="Ej: Chica joven en campus universitario con amigos, comiendo y riendo, se toma un comprimido efervescente en vaso, caja en la mesa, panorama",
+        height=120,
     )
-
-    tipo_contenido = st.radio(
-        "Tipo de contenido:",
-        ["🖼️ Imagen", "🎬 Vídeo"],
-        horizontal=True,
-    )
-    es_video = tipo_contenido == "🎬 Vídeo"
+    tipo = st.radio("Tipo de contenido:", ["🖼️ Imagen", "🎬 Vídeo"], horizontal=True)
+    es_video = tipo == "🎬 Vídeo"
 
     if es_video:
-        duracion = st.radio(
-            "Duración:",
-            ["5 segundos (~€0.14)", "10 segundos (~€0.28)"],
-            horizontal=True,
-        )
-        dur_val = "5" if "5" in duracion else "10"
-        st.info("⏱️ El vídeo tarda 3-5 minutos en generarse.")
+        dur = st.radio("Duración:", ["5 seg (~€0.14)", "10 seg (~€0.28)"], horizontal=True)
+        dur_val = "5" if "5" in dur else "10"
+        st.info("⏱️ El vídeo tarda 3-5 minutos.")
     else:
-        formato_img = st.radio(
-            "Formato de salida:",
-            ["Panorama · 1080×1920 (pantalla completa)", "Header · 1080×350 (cabecera)"],
-            horizontal=True,
-        )
-        fmt_key = "panorama" if "Panorama" in formato_img else "header"
+        st.info("🔧 **Cómo funciona:** rembg recorta el producto → Flux genera la escena → se componen automáticamente.")
 
-# ── Botón de generación ───────────────────────────────────────────────────────
 st.divider()
 generar = st.button(
     "🚀 Generar con Claude + IA",
@@ -247,49 +302,34 @@ generar = st.button(
 )
 
 if generar and uploaded and prompt_usuario:
-
-    # 1. Subir imagen de referencia a fal.ai
-    with st.spinner("📤 Preparando imagen de referencia..."):
-        uploaded.seek(0)
-        img_bytes_orig = uploaded.read()
-        image_url = upload_image(img_bytes_orig)
-
-    # 2. Claude mejora el prompt
-    with st.spinner("🧠 Claude diseñando la composición..."):
-        try:
-            sistema = CLAUDE_VIDEO if es_video else CLAUDE_IMAGE
-            params = ask_claude(claude_client, prompt_usuario, sistema)
-        except Exception as e:
-            st.error(f"Error con Claude: {e}")
-            st.stop()
+    uploaded.seek(0)
+    img_bytes_orig = uploaded.read()
 
     if es_video:
+        # ── Modo Vídeo: Kling image-to-video ─────────────────────────────────
+        with st.spinner("🧠 Claude diseñando el movimiento..."):
+            params = ask_claude(claude_client, prompt_usuario, CLAUDE_VIDEO)
+
         orientacion  = params.get("orientacion", "panorama")
-        prompt_ia    = params.get("prompt_video", "")
+        prompt_video = params.get("prompt_video", "")
         copy_text    = params.get("copy", "")
         explicacion  = params.get("explicacion", "")
         aspect_ratio = "9:16" if orientacion == "panorama" else "16:9"
-    else:
-        fmt_key     = params.get("formato", fmt_key)
-        prompt_ia   = params.get("prompt_kontext", "")
-        copy_text   = params.get("copy", "")
-        explicacion = params.get("explicacion", "")
 
-    # Mostrar lo que Claude propone
-    with st.expander("🧠 Ver propuesta de Claude", expanded=True):
-        st.markdown(f"**Composición:** {explicacion}")
-        st.markdown(f"**Copy sugerido:** _{copy_text}_")
-        st.code(prompt_ia, language=None)
+        with st.expander("🧠 Propuesta de Claude", expanded=True):
+            st.markdown(f"**Animación:** {explicacion}")
+            st.markdown(f"**Copy:** _{copy_text}_")
 
-    # 3. Generar imagen o vídeo
-    if es_video:
-        with st.spinner("🎬 Generando vídeo con Kling AI (3-5 minutos, espera)..."):
+        with st.spinner("📤 Subiendo foto de referencia..."):
+            image_url = upload_to_fal(img_bytes_orig)
+
+        with st.spinner(f"🎬 Generando vídeo con Kling AI ({dur_val}s) — 3-5 minutos..."):
             try:
                 result = fal_client.subscribe(
                     "fal-ai/kling-video/v1.6/standard/image-to-video",
                     arguments={
                         "image_url": image_url,
-                        "prompt": prompt_ia,
+                        "prompt": prompt_video,
                         "duration": dur_val,
                         "aspect_ratio": aspect_ratio,
                     },
@@ -300,88 +340,102 @@ if generar and uploaded and prompt_usuario:
                 st.exception(e)
                 st.stop()
 
-        with st.spinner("📥 Descargando vídeo..."):
-            resp = requests.get(video_url, timeout=180)
-            video_bytes = resp.content
+        video_bytes = requests.get(video_url, timeout=180).content
 
-        # Mostrar resultado
         st.divider()
         c1, c2 = st.columns(2)
         with c1:
-            st.markdown("**Referencia original:**")
+            st.markdown("**Referencia:**")
             st.image(img_bytes_orig, use_container_width=True)
         with c2:
             st.markdown("**Vídeo generado:**")
             st.video(video_bytes)
 
         filename = ts_filename(f"video_{orientacion}", "mp4")
-        st.download_button(
-            "⬇️ Descargar MP4 · Listo para BD ROWA",
-            data=video_bytes,
-            file_name=filename,
-            mime="video/mp4",
-            use_container_width=True,
-        )
+        st.download_button("⬇️ Descargar MP4 · BD ROWA", video_bytes, filename, "video/mp4", use_container_width=True)
 
-        # Guardar en historial
         st.session_state.historial.append({
-            "tipo": "video",
-            "thumb": img_bytes_orig,
-            "video_bytes": video_bytes,
-            "filename": filename,
-            "copy": copy_text,
-            "ts": datetime.now().strftime("%H:%M:%S"),
+            "tipo": "video", "thumb": img_bytes_orig,
+            "video_bytes": video_bytes, "filename": filename,
+            "copy": copy_text, "ts": datetime.now().strftime("%H:%M:%S"),
         })
 
     else:
-        with st.spinner(f"🎨 Generando imagen con Flux Kontext (40-90 segundos)..."):
+        # ── Modo Imagen: pipeline 3 pasos ─────────────────────────────────────
+
+        # Paso 1: Claude diseña
+        with st.spinner("🧠 Claude diseñando la composición..."):
             try:
-                result = fal_client.subscribe(
-                    "fal-ai/flux-pro/kontext",
-                    arguments={
-                        "prompt": prompt_ia,
-                        "image_url": image_url,
-                    },
-                )
-                img_url = result["images"][0]["url"]
+                params = ask_claude(claude_client, prompt_usuario, CLAUDE_IMAGEN)
             except Exception as e:
-                st.error(f"Error generando imagen: {e}")
-                st.exception(e)
+                st.error(f"Error con Claude: {e}")
                 st.stop()
 
-        with st.spinner("📥 Descargando y ajustando formato BD ROWA..."):
-            resp = requests.get(img_url, timeout=60)
-            img_result = resize_to_bdrowa(resp.content, fmt_key)
+        fmt_key     = params.get("formato", "panorama")
+        prompt_esc  = params.get("prompt_escena", "")
+        posicion    = params.get("posicion", "inferior-centro")
+        escala      = float(params.get("escala", 0.30))
+        copy_text   = params.get("copy", "")
+        explicacion = params.get("explicacion", "")
 
-        # Mostrar resultado
+        with st.expander("🧠 Propuesta de Claude", expanded=True):
+            st.markdown(f"**Composición:** {explicacion}")
+            st.markdown(f"**Copy:** _{copy_text}_")
+            st.markdown(f"**Posición producto:** `{posicion}` · **Escala:** `{int(escala*100)}%` del ancho")
+
+        # Paso 2: Eliminar fondo del producto
+        with st.spinner("✂️ Eliminando fondo del producto (rembg)..."):
+            try:
+                product_cutout = remove_background(img_bytes_orig)
+            except Exception as e:
+                st.error(f"Error eliminando fondo: {e}")
+                st.stop()
+
+        # Paso 3: Generar escena con Flux Pro
+        fmt_label = FORMATS[fmt_key]["label"]
+        with st.spinner(f"🎨 Generando escena con Flux Pro ({fmt_label})..."):
+            try:
+                scene_bytes = generate_scene_flux(prompt_esc, fmt_key)
+            except Exception as e:
+                st.error(f"Error generando escena: {e}")
+                st.stop()
+
+        # Paso 4: Componer
+        with st.spinner("🖼️ Componiendo producto sobre la escena..."):
+            try:
+                final_bytes = compose_product_on_scene(
+                    scene_bytes, product_cutout, fmt_key, posicion, escala
+                )
+            except Exception as e:
+                st.error(f"Error en composición: {e}")
+                st.stop()
+
+        # Resultado
         st.divider()
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("**Referencia original:**")
+        st.markdown("## ✅ Resultado")
+
+        t1, t2, t3 = st.columns(3)
+        with t1:
+            st.markdown("**Producto original:**")
             st.image(img_bytes_orig, use_container_width=True)
-        with c2:
-            fmt_label = FORMATS[fmt_key]["label"]
-            st.markdown(f"**Imagen generada · {fmt_label}:**")
-            st.image(img_result, use_container_width=True)
+        with t2:
+            st.markdown("**Escena generada:**")
+            st.image(scene_bytes, use_container_width=True)
+        with t3:
+            st.markdown(f"**Composición final · {fmt_label}:**")
+            st.image(final_bytes, use_container_width=True)
 
         filename = ts_filename(fmt_key, "jpg")
         st.download_button(
             f"⬇️ Descargar {fmt_key.upper()} · Listo para BD ROWA",
-            data=img_result,
-            file_name=filename,
-            mime="image/jpeg",
-            use_container_width=True,
+            final_bytes, filename, "image/jpeg", use_container_width=True,
         )
         st.success(f"✅ Resolución exacta: {FORMATS[fmt_key]['width']}×{FORMATS[fmt_key]['height']} px")
 
-        # Guardar en historial
         st.session_state.historial.append({
-            "tipo": "imagen",
-            "formato": fmt_key,
-            "img_bytes": img_result,
-            "filename": filename,
-            "copy": copy_text,
-            "ts": datetime.now().strftime("%H:%M:%S"),
+            "tipo": "imagen", "formato": fmt_key,
+            "img_bytes": final_bytes, "filename": filename,
+            "copy": copy_text, "ts": datetime.now().strftime("%H:%M:%S"),
         })
 
 # ─── Historial de sesión ──────────────────────────────────────────────────────
@@ -389,30 +443,18 @@ if generar and uploaded and prompt_usuario:
 if st.session_state.historial:
     st.divider()
     st.markdown("## 🗂️ Historial de esta sesión")
-    st.caption("Todas las generaciones de esta sesión. Se borra al cerrar el navegador.")
-
-    cols = st.columns(min(len(st.session_state.historial), 4))
+    n = min(len(st.session_state.historial), 4)
+    cols = st.columns(n)
     for i, item in enumerate(reversed(st.session_state.historial)):
-        col = cols[i % 4]
-        with col:
+        with cols[i % n]:
             st.markdown(f"**{item['ts']}**")
             if item["tipo"] == "imagen":
                 st.image(item["img_bytes"], use_container_width=True)
                 st.caption(f"{item['formato'].upper()} · _{item['copy']}_")
-                st.download_button(
-                    "⬇️ Descargar",
-                    data=item["img_bytes"],
-                    file_name=item["filename"],
-                    mime="image/jpeg",
-                    key=f"hist_dl_{i}",
-                )
+                st.download_button("⬇️", item["img_bytes"], item["filename"],
+                                   "image/jpeg", key=f"h_{i}")
             else:
                 st.image(item["thumb"], use_container_width=True)
                 st.caption(f"Vídeo · _{item['copy']}_")
-                st.download_button(
-                    "⬇️ Descargar MP4",
-                    data=item["video_bytes"],
-                    file_name=item["filename"],
-                    mime="video/mp4",
-                    key=f"hist_dl_{i}",
-                )
+                st.download_button("⬇️ MP4", item["video_bytes"], item["filename"],
+                                   "video/mp4", key=f"h_{i}")
