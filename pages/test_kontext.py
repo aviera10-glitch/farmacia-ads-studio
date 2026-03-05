@@ -122,7 +122,7 @@ Commercial pharmacy advertisement, professional product photography, 4K, clean l
 
     with st.spinner(f"🎨 Generando con {model_id}... (20-40 segundos)"):
         try:
-            result = fal_client.run(
+            result = fal_client.subscribe(
                 model_id,
                 arguments={
                     "prompt": english_prompt,
