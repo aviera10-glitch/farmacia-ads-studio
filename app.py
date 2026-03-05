@@ -174,7 +174,7 @@ def setup_fal():
 def ask_claude(client, prompt: str) -> dict:
     """Claude interpreta el prompt y devuelve parámetros de imagen."""
     response = client.messages.create(
-        model="claude-sonnet-4-6",
+        model="claude-3-5-sonnet-latest",
         max_tokens=1024,
         system=CLAUDE_SYSTEM,
         messages=[{"role": "user", "content": prompt}],

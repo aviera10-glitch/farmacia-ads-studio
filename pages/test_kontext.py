@@ -140,7 +140,7 @@ def setup_fal():
 
 def ask_claude(client, prompt, system):
     resp = client.messages.create(
-        model="claude-sonnet-4-6", max_tokens=1024,
+        model="claude-3-5-sonnet-latest", max_tokens=1024,
         system=system,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -283,7 +283,7 @@ with col_izq:
     elif url_prod:
         try:
             _hdrs = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-_r = requests.get(url_prod, timeout=10, headers=_hdrs)
+            _r = requests.get(url_prod, timeout=10, headers=_hdrs)
             _r.raise_for_status()
             st.image(Image.open(BytesIO(_r.content)), caption="Referencia (URL)", use_container_width=True)
         except Exception as _e:
@@ -323,7 +323,7 @@ if generar and _tiene_imagen and prompt_usuario:
         with st.spinner("⬇️ Descargando imagen desde URL..."):
             try:
                 _hdrs = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-_resp = requests.get(url_prod, timeout=15, headers=_hdrs)
+                _resp = requests.get(url_prod, timeout=15, headers=_hdrs)
                 _resp.raise_for_status()
                 img_bytes_orig = _resp.content
             except Exception as _e:
