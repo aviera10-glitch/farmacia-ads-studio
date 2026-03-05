@@ -140,7 +140,7 @@ def setup_fal():
 
 def ask_claude(client, prompt, system):
     resp = client.messages.create(
-        model="claude-3-5-sonnet-latest", max_tokens=1024,
+        model="claude-3-haiku-20240307", max_tokens=1024,
         system=system,
         messages=[{"role": "user", "content": prompt}],
     )
