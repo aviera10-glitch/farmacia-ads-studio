@@ -273,8 +273,20 @@ with col_izq:
         "Sube la foto del producto (JPG, PNG)",
         type=["jpg", "jpeg", "png"],
     )
+    url_prod = st.text_input(
+        "O pega una URL de imagen (alternativa a subir archivo)",
+        placeholder="https://ejemplo.com/producto.jpg",
+    )
+    # Previsualizar
     if uploaded:
         st.image(Image.open(uploaded), caption="Referencia", use_container_width=True)
+    elif url_prod:
+        try:
+            _r = requests.get(url_prod, timeout=10)
+            _r.raise_for_status()
+            st.image(Image.open(BytesIO(_r.content)), caption="Referencia (URL)", use_container_width=True)
+        except Exception as _e:
+            st.warning(f"No se pudo cargar la imagen: {_e}")
 
 with col_der:
     st.markdown("### ✍️ 2. Describe la escena")
@@ -294,16 +306,27 @@ with col_der:
         st.info("🔧 **Cómo funciona:** rembg recorta el producto → Flux genera la escena → se componen automáticamente.")
 
 st.divider()
+_tiene_imagen = bool(uploaded or url_prod)
 generar = st.button(
     "🚀 Generar con Claude + IA",
     type="primary",
-    disabled=not (uploaded and prompt_usuario),
+    disabled=not (_tiene_imagen and prompt_usuario),
     use_container_width=True,
 )
 
-if generar and uploaded and prompt_usuario:
-    uploaded.seek(0)
-    img_bytes_orig = uploaded.read()
+if generar and _tiene_imagen and prompt_usuario:
+    if uploaded:
+        uploaded.seek(0)
+        img_bytes_orig = uploaded.read()
+    else:
+        with st.spinner("⬇️ Descargando imagen desde URL..."):
+            try:
+                _resp = requests.get(url_prod, timeout=15)
+                _resp.raise_for_status()
+                img_bytes_orig = _resp.content
+            except Exception as _e:
+                st.error(f"Error descargando imagen: {_e}")
+                st.stop()
 
     if es_video:
         # ── Modo Vídeo: Kling image-to-video ─────────────────────────────────
