@@ -196,12 +196,17 @@ def generate_scene_flux(prompt: str, formato: str) -> bytes:
     resp.raise_for_status()
     return resp.content
 
+from PIL import ImageDraw, ImageFont
+import urllib.request
+import os
+
 def compose_product_on_scene(
     scene_bytes: bytes,
     product_png_bytes: bytes,
     formato: str,
     posicion: str,
     escala: float,
+    copy_text: str = "",
 ) -> bytes:
     """Compone el producto recortado encima de la escena."""
     fmt = FORMATS[formato]
@@ -239,23 +244,21 @@ def compose_product_on_scene(
     }
     x, y = pos_map.get(posicion, pos_map["inferior-centro"])
 
-    # 1. Ajuste de color del producto para coincidir con la escena (Color Matching)
-    # Obtenemos el color promedio de la zona de la escena donde irá el producto
+    # 1. Ajuste de color del producto para evitar bordes cortantes
     box = (x, y, x + prod_w, y + prod_h)
     scene_patch = scene.crop(box)
     avg_color = scene_patch.resize((1, 1)).getpixel((0, 0))
-    # Creamos un filtro sutil de la iluminación dominante (blend 15%)
-    color_overlay = Image.new("RGBA", product.size, (avg_color[0], avg_color[1], avg_color[2], int(255 * 0.15)))
+    color_overlay = Image.new("RGBA", product.size, (avg_color[0], avg_color[1], avg_color[2], int(255 * 0.10)))
     product = Image.alpha_composite(product, color_overlay)
     
-    # 2. Sombra de contacto (muy dura, justo debajo, anclando el objeto)
+    # 2. Sombra de contacto
     contact_shadow = Image.new("RGBA", (prod_w, int(prod_h * 0.15)), (0, 0, 0, 0))
     contact_layer = Image.new("RGBA", (int(prod_w * 0.8), int(prod_h * 0.05)), (0, 0, 0, 180))
     contact_shadow.paste(contact_layer, (int(prod_w * 0.1), int(prod_h * 0.05)))
     contact_shadow = contact_shadow.filter(ImageFilter.GaussianBlur(3))
     scene.paste(contact_shadow, (x, y + prod_h - int(prod_h * 0.08)), contact_shadow)
 
-    # 3. Sombra proyectada (suave, difusa, más grande)
+    # 3. Sombra proyectada
     drop_shadow = Image.new("RGBA", (prod_w + 100, prod_h + 100), (0, 0, 0, 0))
     drop_layer = Image.new("RGBA", (prod_w, int(prod_h * 0.2)), (0, 0, 0, 80))
     drop_shadow.paste(drop_layer, (50, 50))
@@ -264,6 +267,42 @@ def compose_product_on_scene(
 
     # Pegar producto original
     scene.paste(product, (x, y), product)
+
+    # 4. Text Overlay / Copy Text render
+    if copy_text:
+        try:
+            font_path = "/tmp/Roboto-Bold.ttf"
+            if not os.path.exists(font_path):
+                urllib.request.urlretrieve("https://github.com/googlefonts/roboto/raw/main/src/hinted/Roboto-Bold.ttf", font_path)
+            font_size = int(target_h * 0.035) if formato == "panorama" else int(target_h * 0.12)
+            font = ImageFont.truetype(font_path, font_size)
+        except:
+            font = ImageFont.load_default()
+            
+        # Add translucent gradient banner for readability behind text
+        overlay = Image.new('RGBA', scene.size, (0, 0, 0, 0))
+        d = ImageDraw.Draw(overlay)
+        banner_h = int(target_h * 0.25) if formato == "panorama" else int(target_h * 0.45)
+        d.rectangle([0, 0, target_w, banner_h], fill=(0, 0, 0, 110))
+        scene = Image.alpha_composite(scene, overlay)
+        
+        draw = ImageDraw.Draw(scene)
+        
+        try:
+            bbox = draw.textbbox((0, 0), copy_text, font=font, align="center")
+            text_w = bbox[2] - bbox[0]
+            text_h = bbox[3] - bbox[1]
+        except AttributeError:
+            # Fallback for older Pillow
+            text_w, text_h = draw.textsize(copy_text, font=font)
+        
+        text_x = (target_w - text_w) // 2
+        text_y = int(target_h * 0.06)
+        
+        # Draw shadow
+        draw.text((text_x + 3, text_y + 3), copy_text, font=font, fill=(0, 0, 0, 200), align="center")
+        # Draw text
+        draw.text((text_x, text_y), copy_text, font=font, fill=(255, 255, 255, 255), align="center")
 
     # Convertir a JPEG
     final = Image.new("RGB", (target_w, target_h), (255, 255, 255))
@@ -445,7 +484,7 @@ if generar and _tiene_imagen and prompt_usuario:
         with st.spinner("🖼️ Componiendo producto sobre la escena..."):
             try:
                 final_bytes = compose_product_on_scene(
-                    scene_bytes, product_cutout, fmt_key, posicion, escala
+                    scene_bytes, product_cutout, fmt_key, posicion, escala, copy_text
                 )
             except Exception as e:
                 st.error(f"Error en composición: {e}")
