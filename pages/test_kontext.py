@@ -177,48 +177,45 @@ def remove_background(img_bytes: bytes) -> bytes:
     from rembg import remove
     return remove(img_bytes)
 
-def generate_scene_flux(prompt: str, formato: str) -> bytes:
-    """Genera la escena de fondo con Flux Pro."""
-    fmt = FORMATS[formato]
-    if formato == "panorama":
-        size = {"width": 1080, "height": 1920}
-    else:
-        size = {"width": 1400, "height": 455}
-
-    result = fal_client.subscribe(
-        "fal-ai/flux-pro/v1.1",
-        arguments={
-            "prompt": prompt,
-            "image_size": size,
-            "num_images": 1,
-            "safety_tolerance": "3",
-            "output_format": "jpeg",
-        },
-    )
-    url = result["images"][0]["url"]
-    resp = requests.get(url, timeout=60)
-    resp.raise_for_status()
-    return resp.content
-
 from PIL import ImageDraw, ImageFont
 import urllib.request
 import os
 
-def compose_product_on_scene(
-    scene_bytes: bytes,
-    product_png_bytes: bytes,
-    formato: str,
-    posicion: str,
-    escala: float,
+def generate_advertisement_with_subject(
+    reference_image_bytes: bytes,
     prompt_escena: str,
-    copy_text: str = "",
+    formato: str,
+    copy_text: str = ""
 ) -> bytes:
-    """Compone el producto recortado encima de la escena."""
+    """Utiliza Flux Subject Reference para dibujar el producto directamente en la escena 3D."""
+    
     fmt = FORMATS[formato]
     target_w, target_h = fmt["width"], fmt["height"]
-
-    # Preparar escena al tamaño exacto BD ROWA
-    scene = Image.open(BytesIO(scene_bytes)).convert("RGBA")
+    
+    # 1. Subir la imagen de referencia (PNG sin fondo)
+    ref_url = upload_to_fal(reference_image_bytes)
+    
+    # 2. Llamada mágica a Flux Subject
+    # Le pedimos que genere la imagen completa, usando ref_url como identidad visual del objeto
+    result = fal_client.subscribe(
+        "fal-ai/flux-subject",
+        arguments={
+            "image_url": ref_url,
+            "prompt": prompt_escena + ", perfect realistic lighting, organic integration of objects, photorealistic.",
+            "image_size": "landscape_4_3" if formato == "header" else "portrait_9_16",
+            "num_inference_steps": 28,
+            "guidance_scale": 3.5,
+            "output_format": "jpeg"
+        }
+    )
+    
+    final_url = result["images"][0]["url"]
+    resp = requests.get(final_url, timeout=60)
+    resp.raise_for_status()
+    
+    scene = Image.open(BytesIO(resp.content)).convert("RGBA")
+    
+    # Asegurar tamaño exacto BD ROWA crop/resize
     ratio_s = scene.width / scene.height
     ratio_t = target_w / target_h
     if ratio_s > ratio_t:
@@ -231,64 +228,7 @@ def compose_product_on_scene(
         scene = scene.crop((0, top, scene.width, top + new_h))
     scene = scene.resize((target_w, target_h), Image.LANCZOS)
 
-    # Preparar producto recortado
-    product = Image.open(BytesIO(product_png_bytes)).convert("RGBA")
-    prod_w = int(target_w * escala)
-    prod_h = int(prod_w * product.height / product.width)
-    product = product.resize((prod_w, prod_h), Image.LANCZOS)
-
-    # Calcular posición
-    margin_x = int(target_w * 0.05)
-    margin_y = int(target_h * 0.04)
-
-    pos_map = {
-        "inferior-centro":    ((target_w - prod_w) // 2, target_h - prod_h - margin_y),
-        "inferior-izquierda": (margin_x, target_h - prod_h - margin_y),
-        "inferior-derecha":   (target_w - prod_w - margin_x, target_h - prod_h - margin_y),
-        "centro":             ((target_w - prod_w) // 2, (target_h - prod_h) // 2),
-    }
-    x, y = pos_map.get(posicion, pos_map["inferior-centro"])
-
-    # Sombra básica para guiar a la IA
-    drop_shadow = Image.new("RGBA", (prod_w + 40, prod_h + 40), (0, 0, 0, 0))
-    drop_layer = Image.new("RGBA", (prod_w, int(prod_h * 0.15)), (0, 0, 0, 100))
-    drop_shadow.paste(drop_layer, (20, 20))
-    drop_shadow = drop_shadow.filter(ImageFilter.GaussianBlur(8))
-    scene.paste(drop_shadow, (x - 20, y + int(prod_h * 0.85) - 20), drop_shadow)
-
-    # Pegar producto original
-    scene.paste(product, (x, y), product)
-
-    # Convertir a JPEG (Montaje bruto)
-    rough_img = Image.new("RGB", (target_w, target_h), (255, 255, 255))
-    rough_img.paste(scene, mask=scene.split()[3])
-    buf = BytesIO()
-    rough_img.save(buf, format="JPEG", quality=95)
-    rough_bytes = buf.getvalue()
-
-    # --- Refinamiento mágico con Fal AI (Image-to-Image) ---
-    try:
-        rough_url = upload_to_fal(rough_bytes)
-        result = fal_client.subscribe(
-            "fal-ai/flux/dev/image-to-image",
-            arguments={
-                "image_url": rough_url,
-                "prompt": prompt_escena + ", perfect realistic lighting, organic integration of objects, soft natural shadows directly on the surface, strictly NO new faces or complex objects in the foreground, photorealistic.",
-                "strength": 0.20, # Baja variación: mantiene el producto intacto pero lo funde con el espacio 3D
-                "image_size": "landscape_4_3" if formato == "header" else "portrait_9_16",
-                "num_inference_steps": 28,
-            }
-        )
-        refined_url = result["images"][0]["url"]
-        resp_ref = requests.get(refined_url, timeout=60)
-        resp_ref.raise_for_status()
-        scene = Image.open(BytesIO(resp_ref.content)).convert("RGBA")
-        scene = scene.resize((target_w, target_h), Image.LANCZOS)
-    except Exception as e:
-        print(f"Error en fal image-to-image blending, usando versión bruta: {e}")
-        scene = rough_img.convert("RGBA")
-
-    # 4. Text Overlay / Copy Text render
+    # 3. Text Overlay / Copy Text render
     if copy_text:
         try:
             font_path = "/tmp/Roboto-Bold.ttf"
@@ -313,23 +253,20 @@ def compose_product_on_scene(
             text_w = bbox[2] - bbox[0]
             text_h = bbox[3] - bbox[1]
         except AttributeError:
-            # Fallback for older Pillow
             text_w, text_h = draw.textsize(copy_text, font=font)
         
         text_x = (target_w - text_w) // 2
         text_y = int(target_h * 0.06)
         
-        # Draw shadow
         draw.text((text_x + 3, text_y + 3), copy_text, font=font, fill=(0, 0, 0, 200), align="center")
-        # Draw text
         draw.text((text_x, text_y), copy_text, font=font, fill=(255, 255, 255, 255), align="center")
 
-    # Convertir a JPEG
     final = Image.new("RGB", (target_w, target_h), (255, 255, 255))
     final.paste(scene, mask=scene.split()[3])
     buf = BytesIO()
     final.save(buf, format="JPEG", quality=95)
     return buf.getvalue()
+
 
 def ts_filename(tag: str, ext: str) -> str:
     return f"bdrowa_{tag}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
@@ -461,10 +398,10 @@ if generar and _tiene_imagen and prompt_usuario:
         })
 
     else:
-        # ── Modo Imagen: pipeline 3 pasos ─────────────────────────────────────
-
-        # Paso 1: Claude diseña
-        with st.spinner("🧠 Claude diseñando la composición..."):
+        # ── Modo Imagen: pipeline 1 paso ───
+        
+        # Paso 1: Claude diseña y redacta
+        with st.spinner("🧠 Claude diseñando la composición (Subject Reference)..."):
             try:
                 params = ask_claude(claude_client, prompt_usuario, CLAUDE_IMAGEN)
             except Exception as e:
@@ -473,55 +410,49 @@ if generar and _tiene_imagen and prompt_usuario:
 
         fmt_key     = params.get("formato", "panorama")
         prompt_esc  = params.get("prompt_escena", "")
-        posicion    = params.get("posicion", "inferior-centro")
-        escala      = float(params.get("escala", 0.30))
+        # Las reglas posicion y escala ya no se usan computacionalmente porque la IA lo dibuja todo, 
+        # pero las mostramos visualmente.
+        posicion    = params.get("posicion", "n/a (Controlado por la IA)")
+        escala      = params.get("escala", "n/a (Controlado por la IA)")
         copy_text   = params.get("copy", "")
         explicacion = params.get("explicacion", "")
 
         with st.expander("🧠 Propuesta de Claude", expanded=True):
             st.markdown(f"**Composición:** {explicacion}")
             st.markdown(f"**Copy:** _{copy_text}_")
-            st.markdown(f"**Posición producto:** `{posicion}` · **Escala:** `{int(escala*100)}%` del ancho")
+            st.markdown(f"**Posición producto:** `{posicion}`")
 
-        # Paso 2: Eliminar fondo del producto
-        with st.spinner("✂️ Eliminando fondo del producto (rembg)..."):
+        # Paso 2: Aislar fondo original para limpiar referencia
+        with st.spinner("✂️ Limpiando la foto de referencia (rembg)..."):
             try:
                 product_cutout = remove_background(img_bytes_orig)
             except Exception as e:
-                st.error(f"Error eliminando fondo: {e}")
+                st.error(f"Error eliminando fondo de referencia: {e}")
                 st.stop()
 
-        # Paso 3: Generar escena con Flux Pro
+        # Paso 3: Generación 1-step con Flux-Subject
         fmt_label = FORMATS[fmt_key]["label"]
-        with st.spinner(f"🎨 Generando escena con Flux Pro ({fmt_label})..."):
+        with st.spinner(f"🎨 Fal AI dibujando el producto directamente en la escena 3D ({fmt_label})..."):
             try:
-                scene_bytes = generate_scene_flux(prompt_esc, fmt_key)
-            except Exception as e:
-                st.error(f"Error generando escena: {e}")
-                st.stop()
-
-        # Paso 4: Componer
-        with st.spinner("🖼️ Integrando producto orgánicamente (IA Image-to-Image)..."):
-            try:
-                final_bytes = compose_product_on_scene(
-                    scene_bytes, product_cutout, fmt_key, posicion, escala, prompt_esc, copy_text
+                final_bytes = generate_advertisement_with_subject(
+                    reference_image_bytes=product_cutout,
+                    prompt_escena=prompt_esc,
+                    formato=fmt_key,
+                    copy_text=copy_text
                 )
             except Exception as e:
-                st.error(f"Error en composición: {e}")
+                st.error(f"Error generando anuncio publicitario puro: {e}")
                 st.stop()
 
-        # Resultado
-        st.divider()
+        # Solo mostraremos 2 columnas en el resultado (Original -> Final), porque no hay 'imagen de fondo' intermedia.
+        st.divider()    
         st.markdown("## ✅ Resultado")
 
-        t1, t2, t3 = st.columns(3)
+        t1, t2 = st.columns(2)
         with t1:
             st.markdown("**Producto original:**")
             st.image(img_bytes_orig, use_container_width=True)
         with t2:
-            st.markdown("**Escena generada:**")
-            st.image(scene_bytes, use_container_width=True)
-        with t3:
             st.markdown(f"**Composición final · {fmt_label}:**")
             st.image(final_bytes, use_container_width=True)
 
