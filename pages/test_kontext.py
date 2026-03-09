@@ -206,6 +206,7 @@ def compose_product_on_scene(
     formato: str,
     posicion: str,
     escala: float,
+    prompt_escena: str,
     copy_text: str = "",
 ) -> bytes:
     """Compone el producto recortado encima de la escena."""
@@ -244,29 +245,44 @@ def compose_product_on_scene(
     }
     x, y = pos_map.get(posicion, pos_map["inferior-centro"])
 
-    # 1. Ajuste de color del producto para evitar bordes cortantes
-    box = (x, y, x + prod_w, y + prod_h)
-    scene_patch = scene.crop(box)
-    avg_color = scene_patch.resize((1, 1)).getpixel((0, 0))
-    color_overlay = Image.new("RGBA", product.size, (avg_color[0], avg_color[1], avg_color[2], int(255 * 0.10)))
-    product = Image.alpha_composite(product, color_overlay)
-    
-    # 2. Sombra de contacto
-    contact_shadow = Image.new("RGBA", (prod_w, int(prod_h * 0.15)), (0, 0, 0, 0))
-    contact_layer = Image.new("RGBA", (int(prod_w * 0.8), int(prod_h * 0.05)), (0, 0, 0, 180))
-    contact_shadow.paste(contact_layer, (int(prod_w * 0.1), int(prod_h * 0.05)))
-    contact_shadow = contact_shadow.filter(ImageFilter.GaussianBlur(3))
-    scene.paste(contact_shadow, (x, y + prod_h - int(prod_h * 0.08)), contact_shadow)
-
-    # 3. Sombra proyectada
-    drop_shadow = Image.new("RGBA", (prod_w + 100, prod_h + 100), (0, 0, 0, 0))
-    drop_layer = Image.new("RGBA", (prod_w, int(prod_h * 0.2)), (0, 0, 0, 80))
-    drop_shadow.paste(drop_layer, (50, 50))
-    drop_shadow = drop_shadow.filter(ImageFilter.GaussianBlur(15))
-    scene.paste(drop_shadow, (x - 50, y + int(prod_h * 0.85) - 50), drop_shadow)
+    # Sombra básica para guiar a la IA
+    drop_shadow = Image.new("RGBA", (prod_w + 40, prod_h + 40), (0, 0, 0, 0))
+    drop_layer = Image.new("RGBA", (prod_w, int(prod_h * 0.15)), (0, 0, 0, 100))
+    drop_shadow.paste(drop_layer, (20, 20))
+    drop_shadow = drop_shadow.filter(ImageFilter.GaussianBlur(8))
+    scene.paste(drop_shadow, (x - 20, y + int(prod_h * 0.85) - 20), drop_shadow)
 
     # Pegar producto original
     scene.paste(product, (x, y), product)
+
+    # Convertir a JPEG (Montaje bruto)
+    rough_img = Image.new("RGB", (target_w, target_h), (255, 255, 255))
+    rough_img.paste(scene, mask=scene.split()[3])
+    buf = BytesIO()
+    rough_img.save(buf, format="JPEG", quality=95)
+    rough_bytes = buf.getvalue()
+
+    # --- Refinamiento mágico con Fal AI (Image-to-Image) ---
+    try:
+        rough_url = upload_to_fal(rough_bytes)
+        result = fal_client.subscribe(
+            "fal-ai/flux/dev/image-to-image",
+            arguments={
+                "image_url": rough_url,
+                "prompt": prompt_escena + ", perfect realistic lighting, organic integration of objects, soft natural shadows directly on the surface, photorealistic.",
+                "strength": 0.20, # Baja variación: mantiene el producto intacto pero lo funde con el espacio 3D
+                "image_size": "landscape_4_3" if formato == "header" else "portrait_9_16",
+                "num_inference_steps": 28,
+            }
+        )
+        refined_url = result["images"][0]["url"]
+        resp_ref = requests.get(refined_url, timeout=60)
+        resp_ref.raise_for_status()
+        scene = Image.open(BytesIO(resp_ref.content)).convert("RGBA")
+        scene = scene.resize((target_w, target_h), Image.LANCZOS)
+    except Exception as e:
+        print(f"Error en fal image-to-image blending, usando versión bruta: {e}")
+        scene = rough_img.convert("RGBA")
 
     # 4. Text Overlay / Copy Text render
     if copy_text:
@@ -481,10 +497,10 @@ if generar and _tiene_imagen and prompt_usuario:
                 st.stop()
 
         # Paso 4: Componer
-        with st.spinner("🖼️ Componiendo producto sobre la escena..."):
+        with st.spinner("🖼️ Integrando producto orgánicamente (IA Image-to-Image)..."):
             try:
                 final_bytes = compose_product_on_scene(
-                    scene_bytes, product_cutout, fmt_key, posicion, escala, copy_text
+                    scene_bytes, product_cutout, fmt_key, posicion, escala, prompt_esc, copy_text
                 )
             except Exception as e:
                 st.error(f"Error en composición: {e}")
