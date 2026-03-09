@@ -203,8 +203,6 @@ def generate_advertisement_with_subject(
             "image_url": ref_url,
             "prompt": prompt_escena + ", perfect realistic lighting, organic integration of objects, photorealistic.",
             "image_size": "landscape_4_3" if formato == "header" else "portrait_9_16",
-            "num_inference_steps": 28,
-            "guidance_scale": 3.5,
             "output_format": "jpeg"
         }
     )
