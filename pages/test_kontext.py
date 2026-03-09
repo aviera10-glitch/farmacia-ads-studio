@@ -71,7 +71,12 @@ Responde SIEMPRE en JSON puro (sin markdown):
   - 0.30 → equilibrado (recomendado)
   - 0.40 → producto grande, protagonista
 
-"copy": Texto publicitario en español, máx 2 líneas.
+"copy": Texto publicitario para estampar en la imagen. MÁXIMO 8 a 10 PALABRAS EN TOTAL.
+  - Eres un copywriter Senior de agencia de publicidad.
+  - Debe ser un mensaje extremadamente corto, directo, punzante y POSITIVO.
+  - NUNCA escribas párrafos. Frases tipo "eslogan".
+  - Ejemplo malo: "Si no consigues conciliar el sueño por la noche, prueba ZzzQuil para descansar mejor y levantarte fresco."
+  - Ejemplo bueno: "Duerme rápido. Despierta renovado."
 "explicacion": 1-2 frases describiendo la composición.
 
 ─── EJEMPLOS ───
