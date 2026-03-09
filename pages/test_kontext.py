@@ -420,8 +420,20 @@ if generar and _tiene_imagen and prompt_usuario:
         with st.spinner("✂️ Limpiando la foto de referencia (rembg)..."):
             try:
                 product_cutout = remove_background(img_bytes_orig)
+                
+                # IMPORTANTE: Muchos modelos de Subject Reference (como Flux) se vuelven locos
+                # o distorsionan la imagen si reciben un PNG con canal Alfa transparente.
+                # Debemos pegarlo sobre un fondo sólido (blanco) antes de enviarlo a la IA.
+                cutout_img = Image.open(BytesIO(product_cutout)).convert("RGBA")
+                solid_bg = Image.new("RGB", cutout_img.size, (255, 255, 255))
+                solid_bg.paste(cutout_img, mask=cutout_img.split()[3])
+                
+                buf = BytesIO()
+                solid_bg.save(buf, format="JPEG", quality=95)
+                product_clean_jpeg = buf.getvalue()
+                
             except Exception as e:
-                st.error(f"Error eliminando fondo de referencia: {e}")
+                st.error(f"Error preparanto fondo de referencia: {e}")
                 st.stop()
 
         # Paso 3: Generación 1-step con Flux-Subject
@@ -429,7 +441,7 @@ if generar and _tiene_imagen and prompt_usuario:
         with st.spinner(f"🎨 Fal AI dibujando el producto directamente en la escena 3D ({fmt_label})..."):
             try:
                 final_bytes = generate_advertisement_with_subject(
-                    reference_image_bytes=product_cutout,
+                    reference_image_bytes=product_clean_jpeg,
                     prompt_escena=prompt_esc,
                     formato=fmt_key,
                     copy_text=copy_text
