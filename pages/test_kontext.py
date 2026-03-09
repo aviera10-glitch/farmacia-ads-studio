@@ -54,21 +54,17 @@ Responde SIEMPRE en JSON puro (sin markdown):
 
 "prompt_escena":
   - SIEMPRE en inglés, muy descriptivo.
-  - REGLA DE ORO DE COMPOSICIÓN: Debes crear una COMPOSICIÓN ASIMÉTRICA. El sujeto principal de la foto (ej. una cama, una persona durmiendo) debe estar claramente a un lado (ej. lado izquierdo), dejando el lado contrario (ej. esquina inferior derecha) completamente vacío como ESPACIO NEGATIVO MASIVO para colocar el producto.
-  - El fondo y los sujetos alejados deben estar MUY DESENFOCADOS (heavy depth of field, heavily blurred background).
-  - NUNCA pongas nada complejo en la esquina vacía designada.
-  - Terminar con: "commercial advertisement background, asymmetric composition, massive empty space in the opposite corner for product placement, professional photography, shallow depth of field, heavily blurred background, 4K."
+  - REGLA DE ORO DE COMPOSICIÓN: Debes crear una COMPOSICIÓN ASIMÉTRICA donde EL PRODUCTO sea el protagonista. Describe explícitamente "the product" o "the object" posado prominentemente en el primer plano a uno de los lados (ej. esquina inferior derecha), sobre una superficie clara (ej. una mesilla, el suelo, arena, etc.).
+  - El fondo o escenario secundario de la foto (la cama, las personas, la habitación) debe quedar en el lado opuesto y MUY DESENFOCADO (heavy depth of field, heavily blurred background).
+  - NUNCA pidas que el primer plano esté "vacío" o "empty". Al revés, debes pedir explícitamente que "the product" esté ahí.
+  - Terminar con: "commercial advertisement, asymmetric composition, the product is prominently placed in the foreground, professional product photography, dramatic studio lighting on the product, shallow depth of field, heavily blurred background, 4K."
   - Para personas: "out of focus people in far background, no recognizable faces".
 
-"posicion": dónde poner el producto en la escena:
-  - DEBE coincidir con el espacio vacío que has descrito en el prompt_escena (ej. si el sujeto está a la izquierda, posicionalo en "inferior-derecha").
-  - "inferior-derecha" o "inferior-izquierda" (Altamente recomendadas para asimetría)
-  - "inferior-centro" (Solo si la imagen tiene composición simétrica)
+"posicion": dónde se pondrá el texto y dónde "mirará" el anuncio:
+  - "inferior-derecha", "inferior-izquierda", o "inferior-centro".
+  - (Esta variable nos sirve como referencia, porque ahora la propia imagen lo dibujará).
 
-"escala": qué fracción del ancho de la imagen debe ocupar el producto. Entre 0.15 y 0.45.
-  - 0.20 → producto pequeño, escena protagonista
-  - 0.30 → equilibrado (recomendado)
-  - 0.40 → producto grande, protagonista
+"escala": "n/a" (ya no se usa, pero envíala en JSON como "n/a").
 
 "copy": Texto publicitario para estampar en la imagen. MÁXIMO ABSOLUTO 2 a 5 PALABRAS.
   - Eres el mejor copywriter del mundo.
@@ -84,21 +80,21 @@ Responde SIEMPRE en JSON puro (sin markdown):
 Usuario: "Chica en campus universitario con amigos comiendo y riendo, se toma un comprimido efervescente en vaso, caja en la mesa, panorama"
 {
   "formato": "panorama",
-  "prompt_escena": "Bright university cafeteria, out of focus people in far background laughing and eating together, no recognizable faces, warm natural daylight from large windows, massive empty negative space on a wooden table in the foreground, commercial advertisement background, professional photography, shallow depth of field, heavily blurred background, clear empty foreground, 4K.",
-  "posicion": "inferior-centro",
-  "escala": 0.28,
+  "prompt_escena": "Bright university cafeteria, out of focus people in far background laughing and eating together, no recognizable faces, warm natural daylight from large windows. In the immediate lower right foreground, the product is prominently displayed resting on a clean wooden table. Commercial advertisement, asymmetric composition, the product is prominently placed in the foreground, professional product photography, dramatic studio lighting on the product, shallow depth of field, heavily blurred background, 4K.",
+  "posicion": "inferior-derecha",
+  "escala": "n/a",
   "copy": "El alivio que te deja disfrutar\nAlmax 500mg · Efervescente",
-  "explicacion": "Campus universitario de fondo muy desenfocado. La caja de producto será la única protagonista nítida en la gran mesa vacía frontal."
+  "explicacion": "Campus universitario de fondo muy desenfocado. El producto será la única protagonista nítida posada en la mesa del primer plano derecho."
 }
 
 Usuario: "Playa mediterránea de verano, familia, solar, panorama, oferta 20%"
 {
   "formato": "panorama",
-  "prompt_escena": "Beautiful Mediterranean beach with white sand and turquoise water, out of focus people in far background playing, golden hour warm light, massive empty negative space on the sand in the foreground, commercial advertisement background, professional photography, shallow depth of field, heavily blurred background, clear empty foreground, 4K.",
+  "prompt_escena": "Beautiful Mediterranean beach with white sand and turquoise water, out of focus people in far background playing, golden hour warm light. In the immediate lower left foreground, the product is prominently displayed resting directly on the smooth sand. Commercial advertisement, asymmetric composition, the product is prominently placed in the foreground, professional product photography, dramatic studio lighting on the product, shallow depth of field, heavily blurred background, 4K.",
   "posicion": "inferior-izquierda",
-  "escala": 0.30,
+  "escala": "n/a",
   "copy": "Protégete este verano\n20% de descuento esta semana",
-  "explicacion": "Playa mediterránea veraniega al fondo. El producto reinará en la amplia arena vacía del primer plano con profundidad de campo."
+  "explicacion": "Playa mediterránea veraniega al fondo izquierdo. El producto reinará con máximo detalle sobre la arena del primer plano."
 }
 """
 
