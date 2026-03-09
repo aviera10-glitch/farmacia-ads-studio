@@ -30,91 +30,45 @@ FORMATS = {
 
 # ─── Sistema Claude ───────────────────────────────────────────────────────────
 
-CLAUDE_IMAGEN = """Eres el director creativo de una farmacia en Canarias, España.
-El usuario tiene una FOTO REAL de un producto farmacéutico. El flujo de trabajo es:
-  1. rembg elimina el fondo de la foto del producto → queda solo el producto recortado.
-  2. Flux Pro genera la ESCENA de fondo (sin el producto — se añadirá después).
-  3. Pillow compone el producto recortado encima de la escena generada.
+CLAUDE_CAMPAIGN = """Eres el director creativo de una farmacia en Canarias, España.
+El usuario tiene una FOTO REAL de un producto farmacéutico y quiere lanzar una GRAN CAMPAÑA MULTICANAL automática.
 
-Tu tarea: interpretar lo que quiere el usuario y devolver los parámetros para generar la escena de fondo.
+El flujo de tu trabajo es generar los textos directores para 4 piezas de contenido simultáneas:
+  1. POSTER VERTICAL (1080x1920) para la pantalla del escaparate BD ROWA.
+  2. BANNER WEB HORIZONTAL (1080x350) para la portada de la web de la farmacia.
+  3. VÍDEO VERTICAL (1080x1920) para cartelería digital.
+  4. COPY DE REDES SOCIALES listo para Instagram/Facebook.
 
-Responde SIEMPRE en JSON puro (sin markdown):
+Responde SIEMPRE en JSON puro (sin markdown, formato exacto):
 {
-  "formato": "panorama" | "header",
-  "prompt_escena": "...",
-  "posicion": "inferior-centro" | "inferior-izquierda" | "inferior-derecha" | "centro",
-  "escala": 0.25,
-  "copy": "...",
+  "poster_prompt": "...",
+  "banner_prompt": "...",
+  "video_prompt": "...",
+  "poster_copy": "Slogan corto",
+  "banner_copy": "Slogan corto",
+  "social_copy": "Texto largo persuasivo...",
   "explicacion": "..."
 }
 
-"formato":
-  - "panorama" → 1080×1920, pantalla completa vertical.
-  - "header"   → 1080×350, banner horizontal.
+--- REGLAS DE GENERACIÓN DE IMÁGENES (poster_prompt y banner_prompt) ---
+- SIEMPRE en inglés, muy descriptivo.
+- REGLA DE ORO DE IMAGEN: Composición asimétrica donde "the product is prominently placed in the foreground". No pidas un espacio "vacío", pide que el producto esté ahí posado prominentemente. El fondo opuesto debe estar "heavily blurred".
+- Terminar imágenes con: "commercial advertisement, asymmetric composition, the product is prominently placed in the foreground, daylight studio, dramatic studio lighting on the product, shallow depth of field, heavily blurred background, 4K."
 
-"prompt_escena":
-  - SIEMPRE en inglés, muy descriptivo.
-  - REGLA DE ORO DE COMPOSICIÓN: Debes crear una COMPOSICIÓN ASIMÉTRICA donde EL PRODUCTO sea el protagonista. Describe explícitamente "the product" o "the object" posado prominentemente en el primer plano a uno de los lados (ej. esquina inferior derecha), sobre una superficie clara (ej. una mesilla, el suelo, arena, etc.).
-  - El fondo o escenario secundario de la foto (la cama, las personas, la habitación) debe quedar en el lado opuesto y MUY DESENFOCADO (heavy depth of field, heavily blurred background).
-  - NUNCA pidas que el primer plano esté "vacío" o "empty". Al revés, debes pedir explícitamente que "the product" esté ahí.
-  - Terminar con: "commercial advertisement, asymmetric composition, the product is prominently placed in the foreground, professional product photography, dramatic studio lighting on the product, shallow depth of field, heavily blurred background, 4K."
-  - Para personas: "out of focus people in far background, no recognizable faces".
+--- REGLAS DE GENERACIÓN DE VÍDEO (video_prompt) ---
+- SIEMPRE en inglés. Es un prompt de Image-to-Video. 
+- Describe el movimiento sutil desde la foto base (ej. "slow camera zoom", "gentle product rotation", "waves moving gently").
+- Terminar vídeos con: "cinematic, smooth motion, professional pharmacy advertisement, 4K."
 
-"posicion": dónde se pondrá el texto y dónde "mirará" el anuncio:
-  - "inferior-derecha", "inferior-izquierda", o "inferior-centro".
-  - (Esta variable nos sirve como referencia, porque ahora la propia imagen lo dibujará).
+--- REGLAS DE COPY (Textos superpuestos en imágenes) ---
+- poster_copy y banner_copy: MÁXIMO ABSOLUTO 2 a 5 PALABRAS. 
+- NUNCA pongas punto final "." en estos eslóganes cortos.
+- Ejemplo bueno: "Dulces sueños" o "Descanso total"
 
-"escala": "n/a" (ya no se usa, pero envíala en JSON como "n/a").
-
-"copy": Texto publicitario para estampar en la imagen. MÁXIMO ABSOLUTO 2 a 5 PALABRAS.
-  - Eres el mejor copywriter del mundo.
-  - Solo frases cortísimas, de impacto. Una o dos palabras por línea.
-  - NUNCA pongas un punto final "." al terminar la frase. Es una regla estricta de diseño gráfico no usar puntos finales en eslóganes.
-  - NUNCA escribas más de 5 palabras. Si te pasas, la campaña fracasará.
-  - Ejemplo malo: "Duerme rápido."
-  - Ejemplo bueno: "Dulces sueños" o "Descanso total"
-"explicacion": 1-2 frases describiendo la composición.
-
-─── EJEMPLOS ───
-
-Usuario: "Chica en campus universitario con amigos comiendo y riendo, se toma un comprimido efervescente en vaso, caja en la mesa, panorama"
-{
-  "formato": "panorama",
-  "prompt_escena": "Bright university cafeteria, out of focus people in far background laughing and eating together, no recognizable faces, warm natural daylight from large windows. In the immediate lower right foreground, the product is prominently displayed resting on a clean wooden table. Commercial advertisement, asymmetric composition, the product is prominently placed in the foreground, professional product photography, dramatic studio lighting on the product, shallow depth of field, heavily blurred background, 4K.",
-  "posicion": "inferior-derecha",
-  "escala": "n/a",
-  "copy": "El alivio que te deja disfrutar\nAlmax 500mg · Efervescente",
-  "explicacion": "Campus universitario de fondo muy desenfocado. El producto será la única protagonista nítida posada en la mesa del primer plano derecho."
-}
-
-Usuario: "Playa mediterránea de verano, familia, solar, panorama, oferta 20%"
-{
-  "formato": "panorama",
-  "prompt_escena": "Beautiful Mediterranean beach with white sand and turquoise water, out of focus people in far background playing, golden hour warm light. In the immediate lower left foreground, the product is prominently displayed resting directly on the smooth sand. Commercial advertisement, asymmetric composition, the product is prominently placed in the foreground, professional product photography, dramatic studio lighting on the product, shallow depth of field, heavily blurred background, 4K.",
-  "posicion": "inferior-izquierda",
-  "escala": "n/a",
-  "copy": "Protégete este verano\n20% de descuento esta semana",
-  "explicacion": "Playa mediterránea veraniega al fondo izquierdo. El producto reinará con máximo detalle sobre la arena del primer plano."
-}
-"""
-
-CLAUDE_VIDEO = """Eres el director creativo de una farmacia en Canarias, España.
-El usuario tiene una FOTO del producto y quiere un vídeo corto donde Kling AI
-anima esa foto, creando movimiento cinematográfico.
-
-Responde SIEMPRE en JSON puro (sin markdown):
-{
-  "orientacion": "panorama" | "landscape",
-  "prompt_video": "...",
-  "copy": "...",
-  "explicacion": "..."
-}
-
-"prompt_video":
-  - SIEMPRE en inglés. Describe el movimiento que empieza desde la foto.
-  - Tipos: slow camera zoom, gentle product rotation, background elements moving
-    (waves, leaves, steam, bokeh), light changing, person entering frame.
-  - Terminar con: "cinematic, smooth motion, professional pharmacy advertisement, 4K."
+--- REGLAS SOCIAL COPY (Texto de feed) ---
+- social_copy: Texto persuasivo, amigable y profesional para publicar en Instagram o Facebook.
+- Usa 2 o 3 emojis relevantes. Incluye 3 hashtags comerciales, uno siempre debe ser #FarmaciaLaOliva.
+- Longitud: 2 a 4 párrafos cortos.
 """
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -296,26 +250,19 @@ with col_izq:
             st.warning(f"No se pudo cargar la imagen: {_e}")
 
 with col_der:
-    st.markdown("### ✍️ 2. Describe la escena")
+    st.markdown("### ✍️ 2. Describe la idea de la campaña")
     prompt_usuario = st.text_area(
         "¿Qué quieres comunicar? (en español)",
-        placeholder="Ej: Chica joven en campus universitario con amigos, comiendo y riendo, se toma un comprimido efervescente en vaso, caja en la mesa, panorama",
+        placeholder="Ej: Campaña de verano fresca y dinámica para Isdin, familia en la playa, queremos destacar la protección total 50+",
         height=120,
     )
-    tipo = st.radio("Tipo de contenido:", ["🖼️ Imagen", "🎬 Vídeo"], horizontal=True)
-    es_video = tipo == "🎬 Vídeo"
-
-    if es_video:
-        dur = st.radio("Duración:", ["5 seg (~€0.14)", "10 seg (~€0.28)"], horizontal=True)
-        dur_val = "5" if "5" in dur else "10"
-        st.info("⏱️ El vídeo tarda 3-5 minutos.")
-    else:
-        st.info("🔧 **Cómo funciona:** rembg recorta el producto → Flux genera la escena → se componen automáticamente.")
+    
+    st.info("🪄 **Generación Multicanal:** Con un solo clic se creará el Póster Vertical, el Banner Web, el Vídeo Animado y el Texto para Redes Sociales.")
 
 st.divider()
 _tiene_imagen = bool(uploaded or url_prod)
 generar = st.button(
-    "🚀 Generar con Claude + IA",
+    "🚀 Generar Campaña Completa (≈ 3 minutos)",
     type="primary",
     disabled=not (_tiene_imagen and prompt_usuario),
     use_container_width=True,
@@ -336,144 +283,132 @@ if generar and _tiene_imagen and prompt_usuario:
                 st.error(f"Error descargando imagen: {_e}")
                 st.stop()
 
-    if es_video:
-        # ── Modo Vídeo: Kling image-to-video ─────────────────────────────────
-        with st.spinner("🧠 Claude diseñando el movimiento..."):
-            params = ask_claude(claude_client, prompt_usuario, CLAUDE_VIDEO)
+    # ── Generación de Campaña Multicanal ─────────────────────────────────
+    with st.spinner("🧠 Claude diseñando la estrategia de la campaña..."):
+        try:
+            params = ask_claude(claude_client, prompt_usuario, CLAUDE_CAMPAIGN)
+        except Exception as e:
+            st.error(f"Error con Claude: {e}")
+            st.stop()
 
-        orientacion  = params.get("orientacion", "panorama")
-        prompt_video = params.get("prompt_video", "")
-        copy_text    = params.get("copy", "")
-        explicacion  = params.get("explicacion", "")
-        aspect_ratio = "9:16" if orientacion == "panorama" else "16:9"
+    poster_prompt = params.get("poster_prompt", "")
+    banner_prompt = params.get("banner_prompt", "")
+    video_prompt  = params.get("video_prompt", "")
+    poster_copy   = params.get("poster_copy", "")
+    banner_copy   = params.get("banner_copy", "")
+    social_copy   = params.get("social_copy", "")
+    explicacion   = params.get("explicacion", "")
 
-        with st.expander("🧠 Propuesta de Claude", expanded=True):
-            st.markdown(f"**Animación:** {explicacion}")
-            st.markdown(f"**Copy:** _{copy_text}_")
+    with st.expander("🧠 Estrategia de Campaña de Claude", expanded=True):
+        st.markdown(f"**Justificación:** {explicacion}")
+        st.markdown(f"**Copy para Redes:**\n\n{social_copy}")
 
-        with st.spinner("📤 Subiendo foto de referencia..."):
-            image_url = upload_to_fal(img_bytes_orig)
+    # Paso 2: Aislar fondo original para limpiar referencia
+    with st.spinner("✂️ Limpiando la foto de referencia (rembg) para evitar distorsiones..."):
+        try:
+            product_cutout = remove_background(img_bytes_orig)
+            
+            # IMPORTANTE: Muchos modelos de Subject Reference (como Flux) se vuelven locos
+            # o distorsionan la imagen si reciben un PNG con canal Alfa transparente.
+            # Debemos pegarlo sobre un fondo sólido (blanco) antes de enviarlo a la IA.
+            cutout_img = Image.open(BytesIO(product_cutout)).convert("RGBA")
+            solid_bg = Image.new("RGB", cutout_img.size, (255, 255, 255))
+            solid_bg.paste(cutout_img, mask=cutout_img.split()[3])
+            
+            buf = BytesIO()
+            solid_bg.save(buf, format="JPEG", quality=95)
+            product_clean_jpeg = buf.getvalue()
+            
+        except Exception as e:
+            st.error(f"Error preparando fondo de referencia: {e}")
+            st.stop()
 
-        with st.spinner(f"🎬 Generando vídeo con Kling AI ({dur_val}s) — 3-5 minutos..."):
-            try:
-                result = fal_client.subscribe(
-                    "fal-ai/kling-video/v1.6/standard/image-to-video",
-                    arguments={
-                        "image_url": image_url,
-                        "prompt": prompt_video,
-                        "duration": dur_val,
-                        "aspect_ratio": aspect_ratio,
-                    },
-                )
-                video_url = result["video"]["url"]
-            except Exception as e:
-                st.error(f"Error generando vídeo: {e}")
-                st.exception(e)
-                st.stop()
+    with st.spinner("📤 Subiendo foto de referencia segura a servidores..."):
+        try:
+            ref_url = upload_to_fal(product_clean_jpeg)
+        except Exception as e:
+            st.error(f"Error subiendo referencia: {e}")
+            st.stop()
 
-        video_bytes = requests.get(video_url, timeout=180).content
+    # Paso 3: Generar Poster, Banner y Video en Paralelo
+    import concurrent.futures
 
-        st.divider()
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("**Referencia:**")
-            st.image(img_bytes_orig, use_container_width=True)
-        with c2:
-            st.markdown("**Vídeo generado:**")
-            st.video(video_bytes)
-
-        filename = ts_filename(f"video_{orientacion}", "mp4")
-        st.download_button("⬇️ Descargar MP4 · BD ROWA", video_bytes, filename, "video/mp4", use_container_width=True)
-
-        st.session_state.historial.append({
-            "tipo": "video", "thumb": img_bytes_orig,
-            "video_bytes": video_bytes, "filename": filename,
-            "copy": copy_text, "ts": datetime.now().strftime("%H:%M:%S"),
-        })
-
-    else:
-        # ── Modo Imagen: pipeline 1 paso ───
-        
-        # Paso 1: Claude diseña y redacta
-        with st.spinner("🧠 Claude diseñando la composición (Subject Reference)..."):
-            try:
-                params = ask_claude(claude_client, prompt_usuario, CLAUDE_IMAGEN)
-            except Exception as e:
-                st.error(f"Error con Claude: {e}")
-                st.stop()
-
-        fmt_key     = params.get("formato", "panorama")
-        prompt_esc  = params.get("prompt_escena", "")
-        # Las reglas posicion y escala ya no se usan computacionalmente porque la IA lo dibuja todo, 
-        # pero las mostramos visualmente.
-        posicion    = params.get("posicion", "n/a (Controlado por la IA)")
-        escala      = params.get("escala", "n/a (Controlado por la IA)")
-        copy_text   = params.get("copy", "")
-        explicacion = params.get("explicacion", "")
-
-        with st.expander("🧠 Propuesta de Claude", expanded=True):
-            st.markdown(f"**Composición:** {explicacion}")
-            st.markdown(f"**Copy:** _{copy_text}_")
-            st.markdown(f"**Posición producto:** `{posicion}`")
-
-        # Paso 2: Aislar fondo original para limpiar referencia
-        with st.spinner("✂️ Limpiando la foto de referencia (rembg)..."):
-            try:
-                product_cutout = remove_background(img_bytes_orig)
-                
-                # IMPORTANTE: Muchos modelos de Subject Reference (como Flux) se vuelven locos
-                # o distorsionan la imagen si reciben un PNG con canal Alfa transparente.
-                # Debemos pegarlo sobre un fondo sólido (blanco) antes de enviarlo a la IA.
-                cutout_img = Image.open(BytesIO(product_cutout)).convert("RGBA")
-                solid_bg = Image.new("RGB", cutout_img.size, (255, 255, 255))
-                solid_bg.paste(cutout_img, mask=cutout_img.split()[3])
-                
-                buf = BytesIO()
-                solid_bg.save(buf, format="JPEG", quality=95)
-                product_clean_jpeg = buf.getvalue()
-                
-            except Exception as e:
-                st.error(f"Error preparanto fondo de referencia: {e}")
-                st.stop()
-
-        # Paso 3: Generación 1-step con Flux-Subject
-        fmt_label = FORMATS[fmt_key]["label"]
-        with st.spinner(f"🎨 Fal AI dibujando el producto directamente en la escena 3D ({fmt_label})..."):
-            try:
-                final_bytes = generate_advertisement_with_subject(
-                    reference_image_bytes=product_clean_jpeg,
-                    prompt_escena=prompt_esc,
-                    formato=fmt_key,
-                    copy_text=copy_text
-                )
-            except Exception as e:
-                st.error(f"Error generando anuncio publicitario puro: {e}")
-                st.stop()
-
-        # Solo mostraremos 2 columnas en el resultado (Original -> Final), porque no hay 'imagen de fondo' intermedia.
-        st.divider()    
-        st.markdown("## ✅ Resultado")
-
-        t1, t2 = st.columns(2)
-        with t1:
-            st.markdown("**Producto original:**")
-            st.image(img_bytes_orig, use_container_width=True)
-        with t2:
-            st.markdown(f"**Composición final · {fmt_label}:**")
-            st.image(final_bytes, use_container_width=True)
-
-        filename = ts_filename(fmt_key, "jpg")
-        st.download_button(
-            f"⬇️ Descargar {fmt_key.upper()} · Listo para BD ROWA",
-            final_bytes, filename, "image/jpeg", use_container_width=True,
+    def generate_poster():
+        return generate_advertisement_with_subject(
+            reference_image_bytes=product_clean_jpeg,
+            prompt_escena=poster_prompt,
+            formato="panorama",
+            copy_text=poster_copy
         )
-        st.success(f"✅ Resolución exacta: {FORMATS[fmt_key]['width']}×{FORMATS[fmt_key]['height']} px")
 
-        st.session_state.historial.append({
-            "tipo": "imagen", "formato": fmt_key,
-            "img_bytes": final_bytes, "filename": filename,
-            "copy": copy_text, "ts": datetime.now().strftime("%H:%M:%S"),
-        })
+    def generate_banner():
+        return generate_advertisement_with_subject(
+            reference_image_bytes=product_clean_jpeg,
+            prompt_escena=banner_prompt,
+            formato="header",
+            copy_text=banner_copy
+        )
+
+    def generate_video():
+        result = fal_client.subscribe(
+            "fal-ai/kling-video/v1.6/standard/image-to-video",
+            arguments={
+                "image_url": ref_url,
+                "prompt": video_prompt,
+                "duration": "5",
+                "aspect_ratio": "9:16",
+            },
+        )
+        video_url_res = result["video"]["url"]
+        return requests.get(video_url_res, timeout=180).content
+
+    with st.spinner("🎨 Generando todas las piezas visuales en paralelo (Póster, Banner y Vídeo)... Esto tomará unos 3 minutos."):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            future_poster = executor.submit(generate_poster)
+            future_banner = executor.submit(generate_banner)
+            future_video  = executor.submit(generate_video)
+            
+            try:
+                poster_bytes = future_poster.result()
+                banner_bytes = future_banner.result()
+                video_bytes  = future_video.result()
+            except Exception as e:
+                st.error(f"Falló la generación concurrente: {e}")
+                st.stop()
+
+    st.divider()    
+    st.markdown("## ✅ Dashboard de Campaña Multicanal")
+    
+    st.info("💬 **Copia este texto para tus redes sociales (Instagram/Facebook)**:")
+    st.code(social_copy, language="markdown")
+
+    st.markdown("### 🖼️ Piezas Visuales")
+    c1, c2, c3 = st.columns([1, 1, 1])
+    
+    with c1:
+        st.markdown("**1. PÓSTER VERTICAL (BD ROWA)**")
+        st.image(poster_bytes, use_container_width=True)
+        fn_poster = ts_filename("panorama", "jpg")
+        st.download_button("⬇️ Descargar JPGE 1080x1920", poster_bytes, fn_poster, "image/jpeg", use_container_width=True)
+
+    with c2:
+        st.markdown("**2. BANNER HORIZONTAL (WEB)**")
+        st.image(banner_bytes, use_container_width=True)
+        fn_banner = ts_filename("header", "jpg")
+        st.download_button("⬇️ Descargar JPGE 1080x350", banner_bytes, fn_banner, "image/jpeg", use_container_width=True)
+        
+    with c3:
+        st.markdown("**3. VÍDEO VERTICAL (BD ROWA)**")
+        st.video(video_bytes)
+        fn_vid = ts_filename("video_panorama", "mp4")
+        st.download_button("⬇️ Descargar MP4 1080x1920", video_bytes, fn_vid, "video/mp4", use_container_width=True)
+
+    # El historial se puede guardar como un resumen
+    st.session_state.historial.append({
+        "tipo": "campaña", "thumb": img_bytes_orig,
+        "ts": datetime.now().strftime("%H:%M:%S"),
+        "copy": social_copy[:30] + "..."
+    })
 
 # ─── Historial de sesión ──────────────────────────────────────────────────────
 
@@ -485,13 +420,16 @@ if st.session_state.historial:
     for i, item in enumerate(reversed(st.session_state.historial)):
         with cols[i % n]:
             st.markdown(f"**{item['ts']}**")
-            if item["tipo"] == "imagen":
+            if item.get("tipo") == "campaña":
+                st.image(item["thumb"], use_container_width=True)
+                st.caption(f"Campaña Múltiple · _{item.get('copy', '')[:30]}..._")
+            elif item.get("tipo") == "imagen":
                 st.image(item["img_bytes"], use_container_width=True)
-                st.caption(f"{item['formato'].upper()} · _{item['copy']}_")
+                st.caption(f"{item.get('formato', '').upper()} · _{item.get('copy', '')[:30]}..._")
                 st.download_button("⬇️", item["img_bytes"], item["filename"],
                                    "image/jpeg", key=f"h_{i}")
             else:
                 st.image(item["thumb"], use_container_width=True)
-                st.caption(f"Vídeo · _{item['copy']}_")
-                st.download_button("⬇️ MP4", item["video_bytes"], item["filename"],
+                st.caption(f"Vídeo · _{item.get('copy', '')[:30]}..._")
+                st.download_button("⬇️ MP4", item.get("video_bytes", b""), item.get("filename", "video.mp4"),
                                    "video/mp4", key=f"h_{i}")
