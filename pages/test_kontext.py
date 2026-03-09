@@ -239,14 +239,30 @@ def compose_product_on_scene(
     }
     x, y = pos_map.get(posicion, pos_map["inferior-centro"])
 
-    # Sombra suave debajo del producto
-    shadow = Image.new("RGBA", (prod_w + 20, prod_h + 20), (0, 0, 0, 0))
-    shadow_layer = Image.new("RGBA", (prod_w, prod_h), (0, 0, 0, 60))
-    shadow.paste(shadow_layer, (10, 10))
-    shadow = shadow.filter(ImageFilter.GaussianBlur(8))
-    scene.paste(shadow, (x - 10, y - 10 + int(prod_h * 0.05)), shadow)
+    # 1. Ajuste de color del producto para coincidir con la escena (Color Matching)
+    # Obtenemos el color promedio de la zona de la escena donde irá el producto
+    box = (x, y, x + prod_w, y + prod_h)
+    scene_patch = scene.crop(box)
+    avg_color = scene_patch.resize((1, 1)).getpixel((0, 0))
+    # Creamos un filtro sutil de la iluminación dominante (blend 15%)
+    color_overlay = Image.new("RGBA", product.size, (avg_color[0], avg_color[1], avg_color[2], int(255 * 0.15)))
+    product = Image.alpha_composite(product, color_overlay)
+    
+    # 2. Sombra de contacto (muy dura, justo debajo, anclando el objeto)
+    contact_shadow = Image.new("RGBA", (prod_w, int(prod_h * 0.15)), (0, 0, 0, 0))
+    contact_layer = Image.new("RGBA", (int(prod_w * 0.8), int(prod_h * 0.05)), (0, 0, 0, 180))
+    contact_shadow.paste(contact_layer, (int(prod_w * 0.1), int(prod_h * 0.05)))
+    contact_shadow = contact_shadow.filter(ImageFilter.GaussianBlur(3))
+    scene.paste(contact_shadow, (x, y + prod_h - int(prod_h * 0.08)), contact_shadow)
 
-    # Pegar producto
+    # 3. Sombra proyectada (suave, difusa, más grande)
+    drop_shadow = Image.new("RGBA", (prod_w + 100, prod_h + 100), (0, 0, 0, 0))
+    drop_layer = Image.new("RGBA", (prod_w, int(prod_h * 0.2)), (0, 0, 0, 80))
+    drop_shadow.paste(drop_layer, (50, 50))
+    drop_shadow = drop_shadow.filter(ImageFilter.GaussianBlur(15))
+    scene.paste(drop_shadow, (x - 50, y + int(prod_h * 0.85) - 50), drop_shadow)
+
+    # Pegar producto original
     scene.paste(product, (x, y), product)
 
     # Convertir a JPEG
