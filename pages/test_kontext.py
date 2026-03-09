@@ -54,12 +54,11 @@ Responde SIEMPRE en JSON puro (sin markdown):
 
 "prompt_escena":
   - SIEMPRE en inglés, muy descriptivo.
-  - Es la escena SIN el producto — el producto se añade después.
-  - Debe incluir SIEMPRE: "with a clear empty flat surface [table/counter/sand] in the foreground
-    where a product will be placed, leave space for product placement."
-  - Estilo fotorrealista, comercial, iluminación profesional.
-  - Terminar con: "commercial advertisement background, professional photography, 4K."
-  - Para personas: "no recognizable faces", "lifestyle photography".
+  - REGLA DE ORO DE COMPOSICIÓN: Debes crear un ESPACIO NEGATIVO MASIVO (massive empty negative space) en primer plano o en el centro.
+  - Elementos complejos o personas DEBEN estar lejos en el fondo y MUY DESENFOCADOS (heavy depth of field, heavily blurred background).
+  - NUNCA pongas caras, brazos u objetos llamativos en el primer plano. El primer plano debe ser una superficie vacía (mesa, mostrador, arena) que ocupe gran parte de la imagen.
+  - Terminar con: "commercial advertisement background, professional photography, shallow depth of field, heavily blurred background, clear empty foreground, 4K."
+  - Para personas: "out of focus people in far background, no recognizable faces".
 
 "posicion": dónde poner el producto en la escena:
   - "inferior-centro" → centrado en la parte inferior (mesas, mostradores)
@@ -80,21 +79,21 @@ Responde SIEMPRE en JSON puro (sin markdown):
 Usuario: "Chica en campus universitario con amigos comiendo y riendo, se toma un comprimido efervescente en vaso, caja en la mesa, panorama"
 {
   "formato": "panorama",
-  "prompt_escena": "Bright university cafeteria, group of young diverse students laughing and eating together at a wooden table, one student holding a glass of effervescent water, warm natural daylight from large windows, books and smartphones on table, cheerful social atmosphere, with a clear empty flat surface in the table foreground where a product box will be placed, leave space for product placement, no recognizable faces, lifestyle photography, commercial advertisement background, professional photography, 4K.",
+  "prompt_escena": "Bright university cafeteria, out of focus people in far background laughing and eating together, no recognizable faces, warm natural daylight from large windows, massive empty negative space on a wooden table in the foreground, commercial advertisement background, professional photography, shallow depth of field, heavily blurred background, clear empty foreground, 4K.",
   "posicion": "inferior-centro",
   "escala": 0.28,
   "copy": "El alivio que te deja disfrutar\nAlmax 500mg · Efervescente",
-  "explicacion": "Campus universitario con estudiantes alegres. La caja se posiciona en la mesa en primer plano, conectando el producto con el momento social."
+  "explicacion": "Campus universitario de fondo muy desenfocado. La caja de producto será la única protagonista nítida en la gran mesa vacía frontal."
 }
 
 Usuario: "Playa mediterránea de verano, familia, solar, panorama, oferta 20%"
 {
   "formato": "panorama",
-  "prompt_escena": "Beautiful Mediterranean beach with white sand and turquoise water, happy family playing in the background, golden hour warm light, sunglasses and beach towels, with a clear empty flat sandy surface in the foreground where a product will be placed, leave space for product placement, no recognizable faces, lifestyle photography, commercial advertisement background, professional photography, 4K.",
+  "prompt_escena": "Beautiful Mediterranean beach with white sand and turquoise water, out of focus people in far background playing, golden hour warm light, massive empty negative space on the sand in the foreground, commercial advertisement background, professional photography, shallow depth of field, heavily blurred background, clear empty foreground, 4K.",
   "posicion": "inferior-izquierda",
   "escala": 0.30,
   "copy": "Protégete este verano\n20% de descuento esta semana",
-  "explicacion": "Playa mediterránea veraniega. El producto se sitúa en la arena en primer plano izquierdo, con espacio para precio a la derecha."
+  "explicacion": "Playa mediterránea veraniega al fondo. El producto reinará en la amplia arena vacía del primer plano con profundidad de campo."
 }
 """
 
@@ -269,7 +268,7 @@ def compose_product_on_scene(
             "fal-ai/flux/dev/image-to-image",
             arguments={
                 "image_url": rough_url,
-                "prompt": prompt_escena + ", perfect realistic lighting, organic integration of objects, soft natural shadows directly on the surface, photorealistic.",
+                "prompt": prompt_escena + ", perfect realistic lighting, organic integration of objects, soft natural shadows directly on the surface, strictly NO new faces or complex objects in the foreground, photorealistic.",
                 "strength": 0.20, # Baja variación: mantiene el producto intacto pero lo funde con el espacio 3D
                 "image_size": "landscape_4_3" if formato == "header" else "portrait_9_16",
                 "num_inference_steps": 28,
